@@ -1,0 +1,100 @@
+name: Buster Renewer (WARP)
+
+on:
+  # 允许在 GitHub 网页端手动点击运行
+  workflow_dispatch:
+
+  schedule:
+    # 每天 UTC 时间凌晨 0 点（北京/新加坡时间早上 8 点）自动执行一次
+    - cron: '0 12 * * *'
+
+jobs:
+  run:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # =========================
+      # 🟡 1️⃣ 启用 WARP
+      # =========================
+      - name: 创建WARP网络
+        uses: fscarmen/warp-on-actions@v1.3
+        with:
+          stack: dual
+          mode: client
+
+      # =========================
+      # 🟡 2️⃣ 安装系统依赖（音频）
+      # =========================
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb wget unzip curl jq p7zip-full \
+            pulseaudio alsa-utils ffmpeg
+
+          pulseaudio --start --exit-idle-time=-1 || true
+
+          pactl load-module module-null-sink sink_name=virtual_speaker || true
+          pactl set-default-sink virtual_speaker || true
+
+          pactl load-module module-virtual-source source_name=virtual_mic || true
+          pactl set-default-source virtual_mic || true
+
+      # =========================
+      # 🟡 3️⃣ Playwright
+      # =========================
+      - name: Install playwright
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install chromium
+
+      # =========================
+      # 🟡 4️⃣ 下载 Buster
+      # =========================
+      - name: Download Buster
+        run: |
+          mkdir -p extensions/buster
+          wget -O extensions/buster/buster.zip \
+            https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
+
+      - name: Unzip Buster
+        run: |
+          mkdir -p extensions/buster/unpacked
+          7z x -y extensions/buster/buster.zip -oextensions/buster/unpacked
+
+          echo "📦 Buster 解压完成"
+          ls -R extensions/buster/unpacked | head -50
+
+      # =========================
+      # 🟡 5️⃣ 调试 IP（很关键）
+      # =========================
+      - name: Check IP
+        run: |
+          echo "🌍 当前 IP:"
+          curl -s https://api.ipify.org
+          echo
+          curl -s https://ipinfo.io
+
+      # =========================
+      # 🟡 6️⃣ 运行脚本
+      # =========================
+      - name: Run script
+        run: |
+          mkdir -p screenshots
+          xvfb-run -a node renew.js
+
+      # =========================
+      # 🟡 7️⃣ 上传截图
+      # =========================
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: screenshots/*
