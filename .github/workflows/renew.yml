@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   schedule:
     # 每天 UTC 时间 0 点和 12 点运行
-    - cron: '35 0,12 * * *'
+    - cron: '35 */2 * * *'
 
 jobs:
   run-renew:
