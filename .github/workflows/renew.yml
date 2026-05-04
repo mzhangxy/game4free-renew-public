@@ -60,22 +60,27 @@ jobs:
       # 🟡 4️⃣ 部署并启动 Xray 前置代理 
       # =========================
       - name: Setup Xray
+        env:
+          XRAY_CONFIG_ENV: ${{ secrets.XRAY_CONFIG }}
         run: |
-          # 1. 下载 Xray 核心 (Linux 64位)
-          wget -O xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+          echo "⬇️ 正在下载 Xray 核心..."
+          wget -q -O xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
           mkdir -p xray
-          unzip xray.zip -d xray
+          unzip -q xray.zip -d xray
           
-          # 2. 将 GitHub Secrets 中的节点配置写入 config.json
-          echo "${{ secrets.XRAY_CONFIG }}" > xray/config.json
+          echo "📝 正在写入节点配置..."
+          # 关键修复：使用环境变量安全地写入多行 JSON
+          echo "$XRAY_CONFIG_ENV" > xray/config.json
           
-          # 3. 关键修复：先进入 xray 目录再启动，确保能读取到 geoip.dat 和 geosite.dat
+          echo "🚀 正在后台启动 Xray..."
           cd xray
-          nohup ./xray -c config.json > ../xray.log 2>&1 &
+          # 关键修复：加上 run 参数
+          nohup ./xray run -c config.json > xray.log 2>&1 &
+          cd ..
           
-          # 等待几秒钟，确保 Xray 启动成功并在本地端口监听
+          echo "⏳ 等待 Xray 核心启动 (5秒)..."
           sleep 5
-      
+
       # =========================
       # 🟡 5️⃣ 调试 IP (验证代理是否生效)
       # =========================
@@ -85,9 +90,14 @@ jobs:
           curl -s https://api.ipify.org || echo "Failed"
           echo
           
-          echo "🚀 走 Xray 代理后的 IP (假设你的 Xray 开放了 10808 socks5 端口):"
-          curl -sx socks5h://127.0.0.1:10808 https://api.ipify.org || echo "代理未生效"
-          echo
+          echo "🚀 测试 Xray HTTP 代理连接 (10808 mixed 端口):"
+          if curl -x http://127.0.0.1:10808 https://api.ipify.org; then
+            echo -e "\n✅ 代理连接成功！"
+          else
+            echo -e "\n❌ 代理未生效，下面是 Xray 启动日志："
+            cat xray/xray.log
+            exit 1
+          fi
           
       - name: Run script
         working-directory: ./private
