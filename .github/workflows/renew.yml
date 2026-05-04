@@ -1,0 +1,101 @@
+name: Buster Renewer (Xray)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '35 0,12 * * *'
+
+jobs:
+  run:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout current repo
+        uses: actions/checkout@v4
+
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/game4free-renew
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }} 
+          path: private
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb wget unzip curl jq p7zip-full pulseaudio alsa-utils ffmpeg
+
+          pulseaudio --start --exit-idle-time=-1 || true
+          pactl load-module module-null-sink sink_name=virtual_speaker || true
+          pactl set-default-sink virtual_speaker || true
+          pactl load-module module-virtual-source source_name=virtual_mic || true
+          pactl set-default-source virtual_mic || true
+
+      - name: Install playwright
+        working-directory: ./private
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install chromium
+
+      - name: Download Buster
+        working-directory: ./private
+        run: |
+          mkdir -p extensions/buster
+          wget -O extensions/buster/buster.zip \
+            https://github.com/dessant/buster/releases/download/v3.1.0/buster_captcha_solver_for_humans-3.1.0-chrome.zip
+
+      - name: Unzip Buster
+        working-directory: ./private
+        run: |
+          mkdir -p extensions/buster/unpacked
+          7z x -y extensions/buster/buster.zip -oextensions/buster/unpacked
+
+      # =========================
+      # 🟡 4️⃣ 部署并启动 Xray 前置代理 
+      # =========================
+      - name: Setup Xray
+        run: |
+          # 1. 下载 Xray 核心 (Linux 64位)
+          wget -O xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+          mkdir -p xray
+          unzip xray.zip -d xray
+          
+          # 2. 将 GitHub Secrets 中的节点配置写入 config.json
+          echo "${{ secrets.XRAY_CONFIG }}" > xray/config.json
+          
+          # 3. 在后台启动 Xray
+          nohup ./xray/xray -c ./xray/config.json > xray.log 2>&1 &
+          
+          # 等待几秒钟，确保 Xray 启动成功并在本地端口监听
+          sleep 5
+
+      # =========================
+      # 🟡 5️⃣ 调试 IP (验证代理是否生效)
+      # =========================
+      - name: Check IP
+        run: |
+          echo "🌍 当前原生 IP:"
+          curl -s https://api.ipify.org || echo "Failed"
+          echo
+          
+          echo "🚀 走 Xray 代理后的 IP (假设你的 Xray 开放了 10808 socks5 端口):"
+          curl -sx socks5h://127.0.0.1:10808 https://api.ipify.org || echo "代理未生效"
+          echo
+          
+      - name: Run script
+        working-directory: ./private
+        run: |
+          mkdir -p screenshots
+          xvfb-run -a node renew.js
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: private/screenshots/*
