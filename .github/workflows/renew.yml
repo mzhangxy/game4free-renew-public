@@ -69,12 +69,13 @@ jobs:
           # 2. 将 GitHub Secrets 中的节点配置写入 config.json
           echo "${{ secrets.XRAY_CONFIG }}" > xray/config.json
           
-          # 3. 在后台启动 Xray
-          nohup ./xray/xray -c ./xray/config.json > xray.log 2>&1 &
+          # 3. 关键修复：先进入 xray 目录再启动，确保能读取到 geoip.dat 和 geosite.dat
+          cd xray
+          nohup ./xray -c config.json > ../xray.log 2>&1 &
           
           # 等待几秒钟，确保 Xray 启动成功并在本地端口监听
           sleep 5
-
+      
       # =========================
       # 🟡 5️⃣ 调试 IP (验证代理是否生效)
       # =========================
