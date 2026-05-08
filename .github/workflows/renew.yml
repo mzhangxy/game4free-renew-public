@@ -94,7 +94,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install DrissionPage xvfbwrapper requests SpeechRecognition pydub
-
+          
       # =========================
       # 🟡 7️⃣ 运行自动续期脚本
       # =========================
@@ -106,17 +106,19 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY: "127.0.0.1:10808"
         run: |
-          # 假设你在上一轮把 python 脚本保存为 renew.py
           python renew.py
 
       # =========================
-      # 🟡 8️⃣ 捕获错误日志与截图上传
-      # 如果脚本失败，会把保存的报错 HTML 源码上传，方便排查
+      # 🟢 8️⃣ 上传研究数据 (新增步骤)
       # =========================
-      - name: Upload Error Logs
+      - name: Upload Token Research Data
         uses: actions/upload-artifact@v4
-        if: always() 
         with:
+          name: recaptcha-token-results
+          # 注意：由于脚本在 ./private 目录下运行，文件也在那里
+          path: ./private/full_token.txt
+          # 设置保留天数（可选）
+          retention-days: 7
           name: debug-logs 
           path: private/*.html 
           retention-days: 3
