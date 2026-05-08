@@ -1,65 +1,103 @@
-name: DrissionPage Research Renewer
+name: DrissionPage Renewer (Xray)
 
 on:
+  # 允许手动触发
   workflow_dispatch:
   schedule:
+    # 按照原定计划定时运行
     - cron: '35 */2 * * *'
 
 jobs:
   run-renew:
     runs-on: ubuntu-22.04
+    timeout-minutes: 20
+
     steps:
-      - name: Checkout repo
+      # =========================
+      # 🟡 1️⃣ 检出代码
+      # =========================
+      - name: Checkout current repo
         uses: actions/checkout@v4
 
       - name: Checkout private repo
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/game4free-renew
-          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }} 
           path: private
 
+      # =========================
+      # 🟡 2️⃣ 配置 Python 环境
+      # =========================
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.10' 
 
-      - name: Install Google Chrome
+      # =========================
+      # 🟡 3️⃣ 安装依赖与 Chrome
+      # =========================
+      - name: Install System Dependencies & Google Chrome
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb ffmpeg unzip
+          sudo apt-get install -y xvfb ffmpeg unzip wget curl jq
           wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
           sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      - name: Install Dependencies
-        run: pip install DrissionPage xvfbwrapper requests SpeechRecognition pydub
+      # =========================
+      # 🟡 4️⃣ 启动 Xray 代理
+      # =========================
+      - name: Setup and Run Xray
+        env:
+          XRAY_CONFIG_ENV: ${{ secrets.XRAY_CONFIG }}
+        run: |
+          wget -q -O xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+          mkdir -p xray
+          unzip -q xray.zip -d xray
+          echo "$XRAY_CONFIG_ENV" > xray/config.json
+          cd xray
+          nohup ./xray run -c config.json > xray.log 2>&1 &
+          cd ..
+          sleep 5
 
-      # 假设你的 Xray 配置步骤在这里保持不变...
+      # =========================
+      # 🟡 5️⃣ 安装 Python 依赖
+      # =========================
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install DrissionPage xvfbwrapper requests SpeechRecognition pydub
 
+      # =========================
+      # 🟡 6️⃣ 运行自动续期脚本
+      # =========================
       - name: Run Renew Script
         working-directory: ./private
         env:
-          TARGET_URL: ${{ secrets.TARGET_URL }}
+          TARGET_URL: ${{ secrets.TARGET_URL || 'https://game4free.net/mzhangxy-colorrora-com' }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY: "127.0.0.1:10808"
-        run: python renew.py
+        run: |
+          python renew.py
 
       # =========================
-      # 🟢 关键：导出 Token 研究数据
+      # 🟢 7️⃣ 上传研究数据 (Artifact)
       # =========================
       - name: Upload Token Research Data
         uses: actions/upload-artifact@v4
         if: always() 
         with:
           name: recaptcha-token-results
-          path: ./private/full_token.txt
+          path: private/full_token.txt
           retention-days: 7
 
-      - name: Upload Error HTML
+      - name: Upload Error Logs
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() 
         with:
-          name: debug-html
-          path: ./private/*.html
+          name: debug-logs 
+          path: private/*.html 
           retention-days: 3
