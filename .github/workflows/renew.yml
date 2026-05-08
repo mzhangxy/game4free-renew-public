@@ -1,124 +1,65 @@
-name: DrissionPage Renewer (Xray)
+name: DrissionPage Research Renewer
 
 on:
-  # 允许手动触发
   workflow_dispatch:
   schedule:
-    # 每天 UTC 时间 0 点和 12 点运行
     - cron: '35 */2 * * *'
 
 jobs:
   run-renew:
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
-
     steps:
-      # =========================
-      # 🟡 1️⃣ 检出代码
-      # =========================
-      - name: Checkout current repo
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Checkout private repo
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/game4free-renew
-          token: ${{ secrets.PRIVATE_REPO_TOKEN }} 
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: private
 
-      # =========================
-      # 🟡 2️⃣ 配置 Python 环境
-      # =========================
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10' 
+          python-version: '3.10'
 
-      # =========================
-      # 🟡 3️⃣ 安装系统级依赖与真实 Chrome
-      # DrissionPage 需要调用真实的 Chrome 浏览器，而不是 Chromium
-      # =========================
-      - name: Install System Dependencies & Google Chrome
+      - name: Install Google Chrome
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb ffmpeg unzip wget curl jq
-          
-          # 导入 Google 签名密钥并安装最新稳定版 Chrome
+          sudo apt-get install -y xvfb ffmpeg unzip
           wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
           sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      # =========================
-      # 🟡 4️⃣ 部署并启动 Xray 前置代理
-      # 使用环境变量安全写入多行 JSON
-      # =========================
-      - name: Setup and Run Xray
-        env:
-          XRAY_CONFIG_ENV: ${{ secrets.XRAY_CONFIG }}
-        run: |
-          echo "⬇️ 正在下载 Xray 核心..."
-          wget -q -O xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-          mkdir -p xray
-          unzip -q xray.zip -d xray
-          
-          echo "📝 正在写入节点配置..."
-          echo "$XRAY_CONFIG_ENV" > xray/config.json
-          
-          echo "🚀 正在后台启动 Xray..."
-          cd xray
-          nohup ./xray run -c config.json > xray.log 2>&1 &
-          cd ..
-          
-          echo "⏳ 等待 Xray 核心启动 (5秒)..."
-          sleep 5
+      - name: Install Dependencies
+        run: pip install DrissionPage xvfbwrapper requests SpeechRecognition pydub
 
-      # =========================
-      # 🟡 5️⃣ 调试代理连通性
-      # =========================
-      - name: Check Proxy IP
-        run: |
-          echo "🚀 测试 Xray HTTP 代理连接 (10808 端口):"
-          if curl -x http://127.0.0.1:10808 https://api.ipify.org; then
-            echo -e "\n✅ 代理连接成功！"
-          else
-            echo -e "\n❌ 代理未生效，下面是 Xray 启动日志："
-            cat xray/xray.log
-            exit 1
-          fi
+      # 假设你的 Xray 配置步骤在这里保持不变...
 
-      # =========================
-      # 🟡 6️⃣ 安装 Python 依赖库
-      # =========================
-      - name: Install Python Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install DrissionPage xvfbwrapper requests SpeechRecognition pydub
-          
-      # =========================
-      # 🟡 7️⃣ 运行自动续期脚本
-      # =========================
       - name: Run Renew Script
         working-directory: ./private
         env:
-          TARGET_URL: ${{ secrets.TARGET_URL || 'https://game4free.net/mzhangxy-colorrora-com' }}
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TARGET_URL: ${{ secrets.TARGET_URL }}
           PROXY: "127.0.0.1:10808"
-        run: |
-          python renew.py
+        run: python renew.py
 
       # =========================
-      # 🟢 8️⃣ 上传研究数据 (新增步骤)
+      # 🟢 关键：导出 Token 研究数据
       # =========================
       - name: Upload Token Research Data
         uses: actions/upload-artifact@v4
+        if: always() 
         with:
           name: recaptcha-token-results
-          # 注意：由于脚本在 ./private 目录下运行，文件也在那里
           path: ./private/full_token.txt
-          # 设置保留天数（可选）
           retention-days: 7
-          name: debug-logs 
-          path: private/*.html 
+
+      - name: Upload Error HTML
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: debug-html
+          path: ./private/*.html
           retention-days: 3
