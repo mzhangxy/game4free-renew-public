@@ -106,7 +106,6 @@ jobs:
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY: "127.0.0.1:10808"
         run: |
-          # 假设你在上一轮把 python 脚本保存为 renew.py
           python renew.py
 
       # =========================
