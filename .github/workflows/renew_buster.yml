@@ -35,19 +35,43 @@ jobs:
           node-version: 20
 
       # =========================
-      # 🟡 1️⃣ 安装系统依赖（音频）
+      # 🟡 1️⃣ 全局网络优化与系统依赖
       # =========================
-      - name: Install dependencies
+      - name: Install System Dependencies & Audio
         run: |
+          echo "🔄 1. 禁用 IPv6 与无用推荐包 (防止 APT 假死和夹带私货)..."
+          echo 'Acquire::ForceIPv4 "true";' | sudo tee /etc/apt/apt.conf.d/99force-ipv4
+          echo 'APT::Install-Recommends "false";' | sudo tee /etc/apt/apt.conf.d/99no-install-recommends
+          echo 'APT::Install-Suggests "false";' | sudo tee -a /etc/apt/apt.conf.d/99no-install-recommends
+          
+          echo "🌍 2. 暴力替换 Azure 镜像源为 Ubuntu 官方主源..."
+          sudo find /etc/apt/ -type f -exec sed -i 's/azure.archive.ubuntu.com/archive.ubuntu.com/g' {} +
+          
+          echo "📥 3. 更新软件菜单..."
           sudo apt-get update
-          sudo apt-get install -y xvfb wget unzip curl jq p7zip-full \
-            pulseaudio alsa-utils ffmpeg
-
+          
+          echo "📦 4. 安装极简依赖..."
+          sudo apt-get install -y xvfb ffmpeg unzip curl pulseaudio alsa-utils
+          
+          echo "🌐 下载并安装最新版 Chrome (离线直连模式，防 Google 源崩溃)..."
+          wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y /tmp/chrome.deb
+          
+          echo "🔊 5. 配置虚拟声卡..."
           pulseaudio --start --exit-idle-time=-1 || true
           pactl load-module module-null-sink sink_name=virtual_speaker || true
           pactl set-default-sink virtual_speaker || true
           pactl load-module module-virtual-source source_name=virtual_mic || true
           pactl set-default-source virtual_mic || true
+      
+      # =========================
+      # 🟡 1️⃣ 安装系统依赖（音频）
+      # =========================
+      #- name: Install dependencies
+      #  run: |
+      #    sudo apt-get update
+      #    sudo apt-get install -y xvfb wget unzip curl jq p7zip-full \
+      #      pulseaudio alsa-utils ffmpeg
 
       # =========================
       # 🟡 2️⃣ Playwright 
