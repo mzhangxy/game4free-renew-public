@@ -103,7 +103,7 @@ jobs:
       # 🟡 4️⃣ 启用 WARP 
       # =========================
       - name: 创建WARP网络
-        uses: fscarmen/warp-on-actions@v1.3
+        uses: fscarmen/warp-on-actions@v1.4
         with:
           stack: dual
           mode: client
